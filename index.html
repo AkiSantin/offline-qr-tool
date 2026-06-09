@@ -1,0 +1,1192 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none';">
+  <title>TOTP QR Code</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef3e9;
+      --ink: #1f2528;
+      --muted: #687176;
+      --line: #1f2528;
+      --panel: #f6f9f1;
+      --accent: #d66a35;
+      --accent-soft: rgba(214, 106, 53, 0.18);
+      --warn-bg: #fff3cd;
+      --warn-line: #1f2528;
+      --warn-ink: #4d3b13;
+      --danger: #b42318;
+      --shadow: 0 18px 45px rgba(31, 37, 40, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    [hidden] { display: none !important; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Noto Sans Mono CJK TC", "Noto Sans Mono CJK JP", monospace;
+      letter-spacing: 0;
+    }
+
+    button, input, select { font: inherit; }
+
+    .shell {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+      gap: 20px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1.5px solid var(--line);
+      border-radius: 8px;
+      /*box-shadow: var(--shadow);*/
+    }
+
+    .form-panel { padding: 24px; }
+
+    .preview-panel {
+      min-height: 520px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(150px, 190px);
+      gap: 16px;
+      align-items: start;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .notice {
+      margin: 0 0 20px;
+      padding: 12px 14px;
+      border: 1.5px solid var(--warn-line);
+      /*border-left: 7px solid var(--accent);*/
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--panel);
+      line-height: 1.55;
+      font-size: .8em;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .field.full { grid-column: 1 / -1; }
+
+    label {
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    input, select {
+      width: 100%;
+      min-height: 44px;
+      border: 1.5px solid var(--line);
+      border-radius: 7px;
+      background: #ffffff;
+      color: var(--ink);
+      padding: 10px 12px;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .secret-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .icon-button {
+      width: 44px;
+      height: 44px;
+      border: 1.5px solid var(--line);
+      border-radius: 7px;
+      background: #ffffff;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .icon-button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .advanced {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1.5px solid var(--line);
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      min-height: 340px;
+      border: 1.5px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    canvas {
+      width: min(100%, 520px);
+      max-height: 520px;
+      image-rendering: pixelated;
+      display: none;
+    }
+
+    .empty {
+      margin: 0;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .status {
+      min-height: 24px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: .8em;
+    }
+
+    .status.error {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .button {
+      min-height: 44px;
+      border: 1.5px solid var(--line);
+      border-radius: 7px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: .8em;
+    }
+
+    .primary {
+      background: var(--ink);
+      color: #ffffff;
+    }
+
+    .primary:hover {
+      background: var(--accent);
+      color: var(--ink);
+    }
+
+    .secondary {
+      background: #ffffff;
+      color: var(--ink);
+    }
+
+    .secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    @media (max-width: 860px) {
+      .shell {
+        grid-template-columns: 1fr;
+        width: min(680px, calc(100% - 24px));
+        padding: 16px 0;
+      }
+      .preview-panel { min-height: auto; }
+    }
+
+    @media (max-width: 560px) {
+      .form-panel, .preview-panel { padding: 16px; }
+      .topbar, .grid, .actions { grid-template-columns: 1fr; }
+      h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="panel form-panel" aria-labelledby="title">
+      <div class="topbar">
+        <div>
+          <h1 id="title" data-i18n="appTitle">TOTP QR Code</h1>
+          <p class="sub" data-i18n="subtitle">從設定碼或 URL 產生可下載的 QR Code。</p>
+        </div>
+        <div class="field">
+          <label for="language" data-i18n="languageLabel">語言</label>
+          <select id="language" name="language" aria-label="Language">
+            <option value="zh">繁體中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+          </select>
+        </div>
+      </div>
+
+      <p class="notice" data-i18n="notice">TOTP 設定碼等同第二因素金鑰。這個檔案不連網、不儲存、不預填；產生後的 QR 圖檔也要當成密碼保存。</p>
+
+      <form id="qr-form" autocomplete="off">
+        <div class="grid">
+          <div class="field full">
+            <label for="qr-type" data-i18n="typeLabel">QR 類型</label>
+            <select id="qr-type" name="qr-type">
+              <option value="totp" selected data-i18n="typeTotp">TOTP 設定碼</option>
+              <option value="url" data-i18n="typeUrl">普通 URL</option>
+            </select>
+          </div>
+
+          <div class="field full mode-url" id="url-section" hidden>
+            <label for="url" data-i18n="urlLabel">URL</label>
+            <input id="url" name="url" type="url" spellcheck="false" inputmode="url" autocomplete="off" placeholder="example.com/page" data-i18n-placeholder="urlPlaceholder">
+          </div>
+
+          <div class="field full mode-totp">
+            <label for="secret" data-i18n="secretLabel">設定碼</label>
+            <div class="secret-row">
+              <input id="secret" name="secret" type="password" spellcheck="false" inputmode="latin" autocomplete="off" placeholder="例如 JBSWY3DPEHPK3PXP" data-i18n-placeholder="secretPlaceholder">
+              <button class="icon-button" type="button" id="toggle-secret" title="顯示 / 隱藏設定碼" aria-label="顯示 / 隱藏設定碼" data-i18n-title="toggleSecret" data-i18n-aria="toggleSecret">◐</button>
+            </div>
+          </div>
+
+          <div class="field mode-totp">
+            <label for="issuer" data-i18n="issuerLabel">服務名稱</label>
+            <input id="issuer" name="issuer" type="text" autocomplete="off" placeholder="Google、GitHub、WordPress" data-i18n-placeholder="issuerPlaceholder">
+          </div>
+
+          <div class="field mode-totp">
+            <label for="account" data-i18n="accountLabel">帳號顯示名稱</label>
+            <input id="account" name="account" type="text" autocomplete="off" placeholder="email 或暱稱" data-i18n-placeholder="accountPlaceholder">
+          </div>
+        </div>
+
+        <div class="advanced grid mode-totp" aria-label="TOTP settings">
+          <div class="field">
+            <label for="algorithm" data-i18n="algorithmLabel">演算法</label>
+            <select id="algorithm" name="algorithm">
+              <option value="SHA1" selected>SHA1</option>
+              <option value="SHA256">SHA256</option>
+              <option value="SHA512">SHA512</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="digits" data-i18n="digitsLabel">驗證碼位數</label>
+            <select id="digits" name="digits">
+              <option value="6" selected>6</option>
+              <option value="8">8</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="period" data-i18n="periodLabel">更新秒數</label>
+            <select id="period" name="period">
+              <option value="30" selected>30</option>
+              <option value="60">60</option>
+            </select>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel preview-panel" aria-labelledby="preview-title">
+      <h2 id="preview-title" data-i18n="qrHeading">QR Code</h2>
+      <div class="canvas-wrap">
+        <canvas id="qr-canvas" aria-label="產生的 QR Code" data-i18n-aria="qrCanvas"></canvas>
+        <p id="empty-state" class="empty" data-i18n="emptyState">輸入內容後會在這裡顯示</p>
+      </div>
+      <div class="actions">
+        <button class="button primary" type="button" id="download-png" disabled data-i18n="downloadPngButton">下載 PNG</button>
+        <button class="button secondary" type="button" id="download-svg" disabled data-i18n="downloadSvgButton">下載 SVG</button>
+        <button class="button secondary" type="button" id="clear" data-i18n="clearButton">清除</button>
+      </div>
+      <p id="status" class="status" role="status"></p>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const translations = {
+        zh: {
+          documentTitle: "TOTP / URL QR Code",
+          appTitle: "TOTP QR Code",
+          subtitle: "從設定碼或 URL 產生可下載的 QR Code。",
+          languageLabel: "語言",
+          notice: "TOTP 設定碼等同第二因素金鑰。這個檔案不連網、不儲存、不預填；產生後的 QR 圖檔也要當成密碼保存。",
+          typeLabel: "QR 類型",
+          typeTotp: "TOTP 設定碼",
+          typeUrl: "普通 URL",
+          urlLabel: "URL",
+          urlPlaceholder: "example.com/page",
+          secretLabel: "設定碼",
+          secretPlaceholder: "例如 JBSWY3DPEHPK3PXP",
+          toggleSecret: "顯示 / 隱藏設定碼",
+          issuerLabel: "服務名稱",
+          issuerPlaceholder: "Google、GitHub、WordPress",
+          accountLabel: "帳號顯示名稱",
+          accountPlaceholder: "email 或暱稱",
+          algorithmLabel: "演算法",
+          digitsLabel: "驗證碼位數",
+          periodLabel: "更新秒數",
+          qrHeading: "QR Code",
+          qrCanvas: "產生的 QR Code",
+          emptyState: "輸入內容後會在這裡顯示",
+          downloadPngButton: "下載 PNG",
+          downloadSvgButton: "下載 SVG",
+          clearButton: "清除",
+          missingSecret: "請輸入設定碼。",
+          invalidSecret: "設定碼包含非 Base32 字元。通常只會有 A-Z 與 2-7。",
+          shortSecret: "設定碼看起來太短，請再確認。",
+          missingUrl: "請輸入 URL。",
+          invalidUrl: "請輸入有效的 http 或 https URL。",
+          contentTooLong: "內容太長。請縮短服務名稱、帳號顯示名稱或 URL。",
+          generatedStatus: "已產生。QR 版本 {version}，修復等級 M。",
+          generationFailed: "產生失敗。",
+          downloadFailed: "下載失敗。"
+        },
+        en: {
+          documentTitle: "TOTP / URL QR Code",
+          appTitle: "TOTP QR Code",
+          subtitle: "Generate downloadable QR Codes from a setup key or URL.",
+          languageLabel: "Language",
+          notice: "A TOTP setup key is a second-factor secret. This file does not connect to the network, store data, or prefill values. Store generated QR images like passwords.",
+          typeLabel: "QR type",
+          typeTotp: "TOTP setup key",
+          typeUrl: "Regular URL",
+          urlLabel: "URL",
+          urlPlaceholder: "example.com/page",
+          secretLabel: "Setup key",
+          secretPlaceholder: "Example: JBSWY3DPEHPK3PXP",
+          toggleSecret: "Show / hide setup key",
+          issuerLabel: "Service name",
+          issuerPlaceholder: "Google, GitHub, WordPress",
+          accountLabel: "Account display name",
+          accountPlaceholder: "email or nickname",
+          algorithmLabel: "Algorithm",
+          digitsLabel: "Code digits",
+          periodLabel: "Refresh seconds",
+          qrHeading: "QR Code",
+          qrCanvas: "Generated QR Code",
+          emptyState: "Enter content to show the QR Code here",
+          downloadPngButton: "Download PNG",
+          downloadSvgButton: "Download SVG",
+          clearButton: "Clear",
+          missingSecret: "Enter a setup key.",
+          invalidSecret: "The setup key contains non-Base32 characters. It usually only uses A-Z and 2-7.",
+          shortSecret: "The setup key looks too short. Please check it again.",
+          missingUrl: "Enter a URL.",
+          invalidUrl: "Enter a valid http or https URL.",
+          contentTooLong: "The content is too long. Shorten the service name, account display name, or URL.",
+          generatedStatus: "Generated. QR version {version}, recovery level M.",
+          generationFailed: "Generation failed.",
+          downloadFailed: "Download failed."
+        },
+        ja: {
+          documentTitle: "TOTP / URL QR Code",
+          appTitle: "TOTP QR Code",
+          subtitle: "設定キーまたは URL からダウンロード可能な QR コードを生成します。",
+          languageLabel: "言語",
+          notice: "TOTP 設定キーは第二要素の秘密情報です。このファイルはネットワーク接続、保存、事前入力を行いません。生成した QR 画像もパスワードと同じように保管してください。",
+          typeLabel: "QR 種類",
+          typeTotp: "TOTP 設定キー",
+          typeUrl: "通常 URL",
+          urlLabel: "URL",
+          urlPlaceholder: "example.com/page",
+          secretLabel: "設定キー",
+          secretPlaceholder: "例: JBSWY3DPEHPK3PXP",
+          toggleSecret: "設定キーを表示 / 非表示",
+          issuerLabel: "サービス名",
+          issuerPlaceholder: "Google、GitHub、WordPress",
+          accountLabel: "アカウント表示名",
+          accountPlaceholder: "メールアドレスまたはニックネーム",
+          algorithmLabel: "アルゴリズム",
+          digitsLabel: "コード桁数",
+          periodLabel: "更新秒数",
+          qrHeading: "QR コード",
+          qrCanvas: "生成された QR コード",
+          emptyState: "内容を入力するとここに表示されます",
+          downloadPngButton: "PNG ダウンロード",
+          downloadSvgButton: "SVG ダウンロード",
+          clearButton: "クリア",
+          missingSecret: "設定キーを入力してください。",
+          invalidSecret: "設定キーに Base32 以外の文字が含まれています。通常は A-Z と 2-7 だけです。",
+          shortSecret: "設定キーが短すぎるようです。もう一度確認してください。",
+          missingUrl: "URL を入力してください。",
+          invalidUrl: "有効な http または https の URL を入力してください。",
+          contentTooLong: "内容が長すぎます。サービス名、アカウント表示名、または URL を短くしてください。",
+          generatedStatus: "生成しました。QR バージョン {version}、誤り訂正レベル M。",
+          generationFailed: "生成に失敗しました。",
+          downloadFailed: "ダウンロードに失敗しました。"
+        }
+      };
+
+      const htmlLang = { zh: "zh-Hant", en: "en", ja: "ja" };
+      let currentLanguage = "zh";
+
+      function t(key, params = {}) {
+        const table = translations[currentLanguage] || translations.zh;
+        let text = table[key] || translations.zh[key] || key;
+        for (const [name, value] of Object.entries(params)) {
+          text = text.replaceAll(`{${name}}`, String(value));
+        }
+        return text;
+      }
+
+      function preferredLanguage() {
+        const language = typeof navigator === "undefined" ? "" : (navigator.language || "").toLowerCase();
+        if (language.startsWith("ja")) return "ja";
+        if (language.startsWith("en")) return "en";
+        return "zh";
+      }
+
+      const RS_BLOCKS_M = [
+        null,
+        { ec: 10, groups: [{ count: 1, data: 16 }] },
+        { ec: 16, groups: [{ count: 1, data: 28 }] },
+        { ec: 26, groups: [{ count: 1, data: 44 }] },
+        { ec: 18, groups: [{ count: 2, data: 32 }] },
+        { ec: 24, groups: [{ count: 2, data: 43 }] },
+        { ec: 16, groups: [{ count: 4, data: 27 }] },
+        { ec: 18, groups: [{ count: 4, data: 31 }] },
+        { ec: 22, groups: [{ count: 2, data: 38 }, { count: 2, data: 39 }] },
+        { ec: 22, groups: [{ count: 3, data: 36 }, { count: 2, data: 37 }] },
+        { ec: 26, groups: [{ count: 4, data: 43 }, { count: 1, data: 44 }] }
+      ];
+
+      const ALIGNMENT_POSITIONS = [
+        null,
+        [],
+        [6, 18],
+        [6, 22],
+        [6, 26],
+        [6, 30],
+        [6, 34],
+        [6, 22, 38],
+        [6, 24, 42],
+        [6, 26, 46],
+        [6, 28, 50]
+      ];
+
+      const encoder = new TextEncoder();
+      const form = document.getElementById("qr-form");
+      const languageInput = document.getElementById("language");
+      const typeInput = document.getElementById("qr-type");
+      const urlInput = document.getElementById("url");
+      const secretInput = document.getElementById("secret");
+      const issuerInput = document.getElementById("issuer");
+      const accountInput = document.getElementById("account");
+      const algorithmInput = document.getElementById("algorithm");
+      const digitsInput = document.getElementById("digits");
+      const periodInput = document.getElementById("period");
+      const toggleSecretButton = document.getElementById("toggle-secret");
+      const canvas = document.getElementById("qr-canvas");
+      const emptyState = document.getElementById("empty-state");
+      const status = document.getElementById("status");
+      const downloadPngButton = document.getElementById("download-png");
+      const downloadSvgButton = document.getElementById("download-svg");
+      const clearButton = document.getElementById("clear");
+      let currentQr = null;
+      let currentFileStem = "qr-code";
+
+      class BitBuffer {
+        constructor() {
+          this.bits = [];
+        }
+
+        append(value, length) {
+          if (length < 0 || length > 31 || value >>> length !== 0) {
+            throw new Error("Invalid bit segment");
+          }
+          for (let i = length - 1; i >= 0; i--) {
+            this.bits.push(((value >>> i) & 1) !== 0);
+          }
+        }
+
+        appendBytes(bytes) {
+          for (const byte of bytes) {
+            this.append(byte, 8);
+          }
+        }
+
+        toBytes() {
+          const result = [];
+          for (let i = 0; i < this.bits.length; i += 8) {
+            let value = 0;
+            for (let j = 0; j < 8; j++) {
+              value = (value << 1) | (this.bits[i + j] ? 1 : 0);
+            }
+            result.push(value);
+          }
+          return result;
+        }
+      }
+
+      class QrMatrix {
+        constructor(version) {
+          this.version = version;
+          this.size = version * 4 + 17;
+          this.modules = Array.from({ length: this.size }, () => Array(this.size).fill(false));
+          this.isFunction = Array.from({ length: this.size }, () => Array(this.size).fill(false));
+          this.mask = 0;
+        }
+
+        setFunctionModule(x, y, dark) {
+          this.modules[y][x] = dark;
+          this.isFunction[y][x] = true;
+        }
+
+        drawFunctionPatterns() {
+          const size = this.size;
+          this.drawFinderPattern(3, 3);
+          this.drawFinderPattern(size - 4, 3);
+          this.drawFinderPattern(3, size - 4);
+
+          for (let i = 8; i < size - 8; i++) {
+            const dark = i % 2 === 0;
+            this.setFunctionModule(6, i, dark);
+            this.setFunctionModule(i, 6, dark);
+          }
+
+          const positions = ALIGNMENT_POSITIONS[this.version];
+          for (const y of positions) {
+            for (const x of positions) {
+              const nearTop = y === 6;
+              const nearLeft = x === 6;
+              const nearRight = x === size - 7;
+              const nearBottom = y === size - 7;
+              if ((nearTop && nearLeft) || (nearTop && nearRight) || (nearBottom && nearLeft)) {
+                continue;
+              }
+              this.drawAlignmentPattern(x, y);
+            }
+          }
+
+          this.drawFormatBits(0, this.modules, true);
+          if (this.version >= 7) {
+            this.drawVersionBits(this.modules, true);
+          }
+        }
+
+        drawFinderPattern(cx, cy) {
+          for (let dy = -4; dy <= 4; dy++) {
+            for (let dx = -4; dx <= 4; dx++) {
+              const x = cx + dx;
+              const y = cy + dy;
+              if (x < 0 || y < 0 || x >= this.size || y >= this.size) {
+                continue;
+              }
+              const dist = Math.max(Math.abs(dx), Math.abs(dy));
+              this.setFunctionModule(x, y, dist !== 2 && dist !== 4);
+            }
+          }
+        }
+
+        drawAlignmentPattern(cx, cy) {
+          for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+              const dist = Math.max(Math.abs(dx), Math.abs(dy));
+              this.setFunctionModule(cx + dx, cy + dy, dist === 0 || dist === 2);
+            }
+          }
+        }
+
+        drawFormatBits(mask, matrix, markFunction) {
+          const data = mask;
+          let rem = data;
+          for (let i = 0; i < 10; i++) {
+            rem = (rem << 1) ^ (((rem >>> 9) & 1) * 0x537);
+          }
+          const bits = ((data << 10) | rem) ^ 0x5412;
+          const size = this.size;
+          const bit = (i) => ((bits >>> i) & 1) !== 0;
+          const set = (x, y, dark) => {
+            matrix[y][x] = dark;
+            if (markFunction) {
+              this.isFunction[y][x] = true;
+            }
+          };
+
+          for (let i = 0; i <= 5; i++) set(8, i, bit(i));
+          set(8, 7, bit(6));
+          set(8, 8, bit(7));
+          set(7, 8, bit(8));
+          for (let i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+          for (let i = 0; i < 8; i++) set(size - 1 - i, 8, bit(i));
+          for (let i = 8; i < 15; i++) set(8, size - 15 + i, bit(i));
+          set(8, size - 8, true);
+        }
+
+        drawVersionBits(matrix, markFunction) {
+          let rem = this.version;
+          for (let i = 0; i < 12; i++) {
+            rem = (rem << 1) ^ (((rem >>> 11) & 1) * 0x1f25);
+          }
+          const bits = (this.version << 12) | rem;
+          const size = this.size;
+          const set = (x, y, dark) => {
+            matrix[y][x] = dark;
+            if (markFunction) {
+              this.isFunction[y][x] = true;
+            }
+          };
+          for (let i = 0; i < 18; i++) {
+            const dark = ((bits >>> i) & 1) !== 0;
+            const a = size - 11 + (i % 3);
+            const b = Math.floor(i / 3);
+            set(a, b, dark);
+            set(b, a, dark);
+          }
+        }
+
+        drawCodewords(codewords) {
+          let bitIndex = 0;
+          let upward = true;
+          for (let right = this.size - 1; right >= 1; right -= 2) {
+            if (right === 6) {
+              right = 5;
+            }
+            for (let vert = 0; vert < this.size; vert++) {
+              const y = upward ? this.size - 1 - vert : vert;
+              for (let j = 0; j < 2; j++) {
+                const x = right - j;
+                if (this.isFunction[y][x]) {
+                  continue;
+                }
+                let dark = false;
+                if (bitIndex < codewords.length * 8) {
+                  dark = ((codewords[bitIndex >>> 3] >>> (7 - (bitIndex & 7))) & 1) !== 0;
+                }
+                this.modules[y][x] = dark;
+                bitIndex++;
+              }
+            }
+            upward = !upward;
+          }
+        }
+
+        applyBestMask() {
+          let bestMask = 0;
+          let bestPenalty = Infinity;
+          let bestModules = null;
+
+          for (let mask = 0; mask < 8; mask++) {
+            const candidate = this.modules.map((row) => row.slice());
+            for (let y = 0; y < this.size; y++) {
+              for (let x = 0; x < this.size; x++) {
+                if (!this.isFunction[y][x] && shouldMask(mask, x, y)) {
+                  candidate[y][x] = !candidate[y][x];
+                }
+              }
+            }
+            this.drawFormatBits(mask, candidate, false);
+            if (this.version >= 7) {
+              this.drawVersionBits(candidate, false);
+            }
+            const penalty = getPenaltyScore(candidate);
+            if (penalty < bestPenalty) {
+              bestPenalty = penalty;
+              bestMask = mask;
+              bestModules = candidate;
+            }
+          }
+
+          this.mask = bestMask;
+          this.modules = bestModules;
+        }
+      }
+
+      const gfExp = new Array(512).fill(0);
+      const gfLog = new Array(256).fill(0);
+      let fieldValue = 1;
+      for (let i = 0; i < 255; i++) {
+        gfExp[i] = fieldValue;
+        gfLog[fieldValue] = i;
+        fieldValue <<= 1;
+        if (fieldValue & 0x100) {
+          fieldValue ^= 0x11d;
+        }
+      }
+      for (let i = 255; i < 512; i++) {
+        gfExp[i] = gfExp[i - 255];
+      }
+
+      function gfMultiply(x, y) {
+        if (x === 0 || y === 0) return 0;
+        return gfExp[gfLog[x] + gfLog[y]];
+      }
+
+      function reedSolomonDivisor(degree) {
+        const result = new Array(degree).fill(0);
+        result[degree - 1] = 1;
+        let root = 1;
+        for (let i = 0; i < degree; i++) {
+          for (let j = 0; j < result.length; j++) {
+            result[j] = gfMultiply(result[j], root);
+            if (j + 1 < result.length) {
+              result[j] ^= result[j + 1];
+            }
+          }
+          root = gfMultiply(root, 2);
+        }
+        return result;
+      }
+
+      function reedSolomonRemainder(data, divisor) {
+        const result = new Array(divisor.length).fill(0);
+        for (const byte of data) {
+          const factor = byte ^ result.shift();
+          result.push(0);
+          for (let i = 0; i < result.length; i++) {
+            result[i] ^= gfMultiply(divisor[i], factor);
+          }
+        }
+        return result;
+      }
+
+      function totalDataCodewords(version) {
+        return RS_BLOCKS_M[version].groups.reduce((sum, group) => sum + group.count * group.data, 0);
+      }
+
+      function chooseVersion(byteLength) {
+        for (let version = 1; version < RS_BLOCKS_M.length; version++) {
+          const lengthBits = version <= 9 ? 8 : 16;
+          const neededBits = 4 + lengthBits + byteLength * 8;
+          if (neededBits <= totalDataCodewords(version) * 8) {
+            return version;
+          }
+        }
+        throw new Error(t("contentTooLong"));
+      }
+
+      function makeDataCodewords(bytes, version) {
+        const capacityBits = totalDataCodewords(version) * 8;
+        const buffer = new BitBuffer();
+        buffer.append(0x4, 4);
+        buffer.append(bytes.length, version <= 9 ? 8 : 16);
+        buffer.appendBytes(bytes);
+
+        const terminator = Math.min(4, capacityBits - buffer.bits.length);
+        buffer.append(0, terminator);
+        while (buffer.bits.length % 8 !== 0) buffer.append(0, 1);
+
+        let pad = 0xec;
+        while (buffer.bits.length < capacityBits) {
+          buffer.append(pad, 8);
+          pad ^= 0xec ^ 0x11;
+        }
+        return buffer.toBytes();
+      }
+
+      function addErrorCorrection(dataCodewords, version) {
+        const spec = RS_BLOCKS_M[version];
+        const divisor = reedSolomonDivisor(spec.ec);
+        const blocks = [];
+        let offset = 0;
+
+        for (const group of spec.groups) {
+          for (let i = 0; i < group.count; i++) {
+            const data = dataCodewords.slice(offset, offset + group.data);
+            offset += group.data;
+            blocks.push({ data, ecc: reedSolomonRemainder(data, divisor) });
+          }
+        }
+
+        const result = [];
+        const maxDataLength = Math.max(...blocks.map((block) => block.data.length));
+        for (let i = 0; i < maxDataLength; i++) {
+          for (const block of blocks) {
+            if (i < block.data.length) result.push(block.data[i]);
+          }
+        }
+        for (let i = 0; i < spec.ec; i++) {
+          for (const block of blocks) result.push(block.ecc[i]);
+        }
+        return result;
+      }
+
+      function createQr(text) {
+        const bytes = Array.from(encoder.encode(text));
+        const version = chooseVersion(bytes.length);
+        const dataCodewords = makeDataCodewords(bytes, version);
+        const allCodewords = addErrorCorrection(dataCodewords, version);
+        const qr = new QrMatrix(version);
+        qr.drawFunctionPatterns();
+        qr.drawCodewords(allCodewords);
+        qr.applyBestMask();
+        return qr;
+      }
+
+      function shouldMask(mask, x, y) {
+        switch (mask) {
+          case 0: return (x + y) % 2 === 0;
+          case 1: return y % 2 === 0;
+          case 2: return x % 3 === 0;
+          case 3: return (x + y) % 3 === 0;
+          case 4: return (Math.floor(y / 2) + Math.floor(x / 3)) % 2 === 0;
+          case 5: return ((x * y) % 2) + ((x * y) % 3) === 0;
+          case 6: return (((x * y) % 2) + ((x * y) % 3)) % 2 === 0;
+          case 7: return (((x + y) % 2) + ((x * y) % 3)) % 2 === 0;
+          default: return false;
+        }
+      }
+
+      function getPenaltyScore(matrix) {
+        const size = matrix.length;
+        let result = 0;
+
+        for (let y = 0; y < size; y++) result += penaltyRuns(matrix[y]);
+        for (let x = 0; x < size; x++) {
+          const column = [];
+          for (let y = 0; y < size; y++) column.push(matrix[y][x]);
+          result += penaltyRuns(column);
+        }
+
+        for (let y = 0; y < size - 1; y++) {
+          for (let x = 0; x < size - 1; x++) {
+            const color = matrix[y][x];
+            if (color === matrix[y][x + 1] && color === matrix[y + 1][x] && color === matrix[y + 1][x + 1]) {
+              result += 3;
+            }
+          }
+        }
+
+        for (let y = 0; y < size; y++) result += penaltyFinderLike(matrix[y]);
+        for (let x = 0; x < size; x++) {
+          const column = [];
+          for (let y = 0; y < size; y++) column.push(matrix[y][x]);
+          result += penaltyFinderLike(column);
+        }
+
+        let dark = 0;
+        for (const row of matrix) {
+          for (const module of row) {
+            if (module) dark++;
+          }
+        }
+        const total = size * size;
+        return result + Math.floor(Math.abs(dark * 20 - total * 10) / total) * 10;
+      }
+
+      function penaltyRuns(line) {
+        let result = 0;
+        let runColor = line[0];
+        let runLength = 1;
+        for (let i = 1; i <= line.length; i++) {
+          if (i < line.length && line[i] === runColor) {
+            runLength++;
+          } else {
+            if (runLength >= 5) result += 3 + (runLength - 5);
+            if (i < line.length) {
+              runColor = line[i];
+              runLength = 1;
+            }
+          }
+        }
+        return result;
+      }
+
+      function penaltyFinderLike(line) {
+        let result = 0;
+        const pattern = [true, false, true, true, true, false, true];
+        for (let i = 0; i <= line.length - 7; i++) {
+          let matches = true;
+          for (let j = 0; j < pattern.length; j++) {
+            if (line[i + j] !== pattern[j]) {
+              matches = false;
+              break;
+            }
+          }
+          if (!matches) continue;
+          const before = i >= 4 && !line[i - 1] && !line[i - 2] && !line[i - 3] && !line[i - 4];
+          const after = i + 11 <= line.length && !line[i + 7] && !line[i + 8] && !line[i + 9] && !line[i + 10];
+          if (before || after) result += 40;
+        }
+        return result;
+      }
+
+      function normalizeSecret(raw) {
+        return raw.replace(/[\s-]/g, "").toUpperCase().replace(/=+$/g, "");
+      }
+
+      function validateSecret(secret, raw) {
+        if (!raw.trim()) return t("missingSecret");
+        if (!secret) return t("missingSecret");
+        if (!/^[A-Z2-7]+$/.test(secret)) return t("invalidSecret");
+        if (secret.length < 8) return t("shortSecret");
+        return "";
+      }
+
+      function normalizeUrl(raw) {
+        const value = raw.trim();
+        if (!value) throw new Error(t("missingUrl"));
+        const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+        const url = new URL(hasScheme ? value : "https" + "://" + value);
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+          throw new Error(t("invalidUrl"));
+        }
+        return url.href;
+      }
+
+      function buildTotpUri(secret) {
+        const issuer = issuerInput.value.trim() || "TOTP";
+        const account = accountInput.value.trim() || "account";
+        const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(account)}`;
+        const params = new URLSearchParams();
+        params.set("secret", secret);
+        params.set("issuer", issuer);
+        params.set("algorithm", algorithmInput.value);
+        params.set("digits", digitsInput.value);
+        params.set("period", periodInput.value);
+        currentFileStem = safeFileStem(`${issuer}-${account}`) || "totp-qr";
+        return `otpauth://totp/${label}?${params.toString()}`;
+      }
+
+      function buildPayload() {
+        if (typeInput.value === "url") {
+          const href = normalizeUrl(urlInput.value);
+          currentFileStem = safeFileStem(new URL(href).hostname) || "url-qr";
+          return href;
+        }
+
+        const rawSecret = secretInput.value;
+        const secret = normalizeSecret(rawSecret);
+        const error = validateSecret(secret, rawSecret);
+        if (error) throw new Error(error);
+        return buildTotpUri(secret);
+      }
+
+      function safeFileStem(value) {
+        const raw = value.trim().replace(/\s+/g, "-").toLowerCase();
+        return raw.replace(/[^a-z0-9._-]/g, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
+      }
+
+      function drawQrToCanvas(qr) {
+        const quiet = 4;
+        const scale = Math.max(4, Math.floor(540 / (qr.size + quiet * 2)));
+        const pixelSize = (qr.size + quiet * 2) * scale;
+        canvas.width = pixelSize;
+        canvas.height = pixelSize;
+        const context = canvas.getContext("2d");
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, pixelSize, pixelSize);
+        context.fillStyle = "#000000";
+        for (let y = 0; y < qr.size; y++) {
+          for (let x = 0; x < qr.size; x++) {
+            if (qr.modules[y][x]) {
+              context.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
+            }
+          }
+        }
+      }
+
+      function qrToSvg(qr) {
+        const quiet = 4;
+        const size = qr.size + quiet * 2;
+        const pathParts = [];
+        for (let y = 0; y < qr.size; y++) {
+          for (let x = 0; x < qr.size; x++) {
+            if (qr.modules[y][x]) {
+              pathParts.push(`M${x + quiet},${y + quiet}h1v1h-1z`);
+            }
+          }
+        }
+        return [
+          `<?xml version="1.0" encoding="UTF-8"?>`,
+          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">`,
+          `<rect width="100%" height="100%" fill="#fff"/>`,
+          `<path fill="#000" d="${pathParts.join("")}"/>`,
+          `</svg>`
+        ].join("\n");
+      }
+
+      function setStatus(message, isError = false) {
+        status.textContent = message;
+        status.classList.toggle("error", isError);
+      }
+
+      function clearOutput() {
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.style.display = "none";
+        emptyState.style.display = "block";
+        downloadPngButton.disabled = true;
+        downloadSvgButton.disabled = true;
+        currentQr = null;
+      }
+
+      function applyLanguage(language, shouldUpdate = true) {
+        currentLanguage = translations[language] ? language : "zh";
+        languageInput.value = currentLanguage;
+        document.documentElement.setAttribute("lang", htmlLang[currentLanguage]);
+        document.title = t("documentTitle");
+
+        for (const element of document.querySelectorAll("[data-i18n]")) {
+          element.textContent = t(element.dataset.i18n);
+        }
+        for (const element of document.querySelectorAll("[data-i18n-placeholder]")) {
+          element.placeholder = t(element.dataset.i18nPlaceholder);
+        }
+        for (const element of document.querySelectorAll("[data-i18n-title]")) {
+          element.title = t(element.dataset.i18nTitle);
+        }
+        for (const element of document.querySelectorAll("[data-i18n-aria]")) {
+          element.setAttribute("aria-label", t(element.dataset.i18nAria));
+        }
+
+        if (shouldUpdate) update();
+      }
+
+      function applyMode(shouldUpdate = true) {
+        const isUrl = typeInput.value === "url";
+        for (const element of document.querySelectorAll(".mode-url")) {
+          element.hidden = !isUrl;
+        }
+        for (const element of document.querySelectorAll(".mode-totp")) {
+          element.hidden = isUrl;
+        }
+        if (shouldUpdate) update();
+      }
+
+      function update() {
+        try {
+          const rawRelevantValue = typeInput.value === "url" ? urlInput.value.trim() : secretInput.value.trim();
+          if (!rawRelevantValue) {
+            clearOutput();
+            setStatus("");
+            return;
+          }
+
+          const qr = createQr(buildPayload());
+          currentQr = qr;
+          drawQrToCanvas(qr);
+          canvas.style.display = "block";
+          emptyState.style.display = "none";
+          downloadPngButton.disabled = false;
+          downloadSvgButton.disabled = false;
+          setStatus(t("generatedStatus", { version: qr.version }));
+        } catch (errorObject) {
+          clearOutput();
+          setStatus(errorObject.message || t("generationFailed"), true);
+        }
+      }
+
+      function downloadBlob(blob, filename) {
+        if (!blob) {
+          setStatus(t("downloadFailed"), true);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      form.addEventListener("input", update);
+      form.addEventListener("change", update);
+
+      languageInput.addEventListener("change", () => {
+        applyLanguage(languageInput.value);
+      });
+
+      typeInput.addEventListener("change", () => {
+        applyMode();
+      });
+
+      toggleSecretButton.addEventListener("click", () => {
+        secretInput.type = secretInput.type === "password" ? "text" : "password";
+        secretInput.focus();
+      });
+
+      clearButton.addEventListener("click", () => {
+        const savedLanguage = languageInput.value;
+        const savedType = typeInput.value;
+        form.reset();
+        languageInput.value = savedLanguage;
+        typeInput.value = savedType;
+        secretInput.type = "password";
+        applyLanguage(savedLanguage, false);
+        applyMode(false);
+        clearOutput();
+        setStatus("");
+        (savedType === "url" ? urlInput : secretInput).focus();
+      });
+
+      downloadPngButton.addEventListener("click", () => {
+        if (!currentQr) return;
+        canvas.toBlob((blob) => downloadBlob(blob, `${currentFileStem}-qr.png`), "image/png");
+      });
+
+      downloadSvgButton.addEventListener("click", () => {
+        if (!currentQr) return;
+        const svg = qrToSvg(currentQr);
+        downloadBlob(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), `${currentFileStem}-qr.svg`);
+      });
+
+      applyLanguage(preferredLanguage(), false);
+      applyMode(false);
+      clearOutput();
+    })();
+  </script>
+</body>
+</html>
