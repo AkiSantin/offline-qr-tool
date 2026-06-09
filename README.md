@@ -9,6 +9,8 @@ Current features:
 - Download as PNG or SVG.
 - Switch UI language: Traditional Chinese, English, Japanese.
 
+![Screenshot](screenshot.png)
+
 ## Why Offline
 
 TOTP setup keys are second-factor secrets. Anyone with the setup key or generated authenticator QR Code can generate your 2FA codes.
