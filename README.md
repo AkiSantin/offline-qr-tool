@@ -11,6 +11,12 @@ Current features:
 
 ![Screenshot](screenshot.png)
 
+Also known as:
+- TOTP QR Code generator
+- OTPAuth URI generator
+- Google Authenticator setup key QR generator
+- 2FA secret QR generator
+
 ## Why Offline
 
 TOTP setup keys are second-factor secrets. Anyone with the setup key or generated authenticator QR Code can generate your 2FA codes.
